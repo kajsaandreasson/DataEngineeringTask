@@ -14,12 +14,11 @@ def load_data(URL):
    return file
    
 
-
-def create_connection(dataBase_path):
+def create_connection():
     """ create a database connection to a SQLite database """
     connection = None
     try:
-        connection = sqlite3.connect(dataBase_path)  # sqlite3.connect(':memory:') #  
+        connection = sqlite3.connect(':memory:')
         print(sqlite3.version)
     except Error as e:
         print(e)
@@ -98,7 +97,6 @@ def create_customer(connection, customer):
 
    except sqlite3.IntegrityError as error:
       print(error)
-      return 
 
 
 def load_loan_data(connection, URL_LOANS):
@@ -164,12 +162,48 @@ def load_customer_data(connection, URL_CUSTOMERS):
       create_customer(connection, cust_data)
 
 
+def join_tables_and_write_to_file(connection, OUTPUT_DATA_PATH):
+
+   query = ''' SELECT loans.id,
+                     loans.user_id,
+                     loan_timestamp,
+                     loan_amount,
+                     loan_purpose,
+                     outcome,
+                     interest,
+                     webvisit_id,
+                     customers.name as name,
+                     customers.ssn as ssn,
+                     customers.birthday as birthday,
+                     customers.gender,
+                     customers.city,
+                     customers.zip_code,
+                     visits.visit_timestamp,
+                     visits.referrer,
+                     visits.campaing_name
+
+               FROM loans 
+               LEFT JOIN customers ON customers.user_id = loans.user_id
+               LEFT JOIN visits ON visits.id = loans.webvisit_id
+               '''
+
+   cursor = connection.cursor()
+   cursor.execute(query)
+   connection.commit()
+
+   with open(OUTPUT_DATA_PATH, "w") as csv_file:
+      csv_writer = csv.writer(csv_file)
+      csv_writer.writerow([i[0] for i in cursor.description])
+      csv_writer.writerows(cursor)
+
+
          
 if __name__ == '__main__':
-   dataBase_path = r"/Users/kajsaandreasson/DataEngineeringTask/dataBase/loanDataBase2.db"
+
    URL_VISITS = "http://rocker-data-engineering-task.storage.googleapis.com/data/visits.csv"
    URL_LOANS = "http://rocker-data-engineering-task.storage.googleapis.com/data/loan-20{}-{}.csv"
    URL_CUSTOMERS = "http://rocker-data-engineering-task.storage.googleapis.com/data/customers.json"
+   OUTPUT_DATA_PATH = "final_data.csv"
 
    sql_create_loan_table = """ CREATE TABLE IF NOT EXISTS loans (
                                         id integer PRIMARY KEY,
@@ -200,18 +234,18 @@ if __name__ == '__main__':
                                        zip_code text
                                     ); """
    
-   connection = create_connection(dataBase_path)
+   connection = create_connection()
 
    if connection:
       loan_table = create_table(connection, sql_create_loan_table)
       visits_table = create_table(connection, sql_create_visits_table)
       customer_table = create_table(connection, sql_create_customers_table)
 
-
    with connection:
-      #load_loan_data(connection, URL_LOANS)
-      #load_visits_data(connection, URL_VISITS)
+      load_loan_data(connection, URL_LOANS)
+      load_visits_data(connection, URL_VISITS)
       load_customer_data(connection, URL_CUSTOMERS)
+      join_tables_and_write_to_file(connection, OUTPUT_DATA_PATH)
 
       
       
