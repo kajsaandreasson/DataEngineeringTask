@@ -1,25 +1,23 @@
-
-from multiprocessing import connection
 import sqlite3
 import urllib.request
-from sqlite3 import Error
 import csv
-from io import StringIO
 import json
+from sqlite3 import Error
+from multiprocessing import connection
 
 
 
 def load_data(URL):
+   """ Open URL """
    file = urllib.request.urlopen(URL)
    return file
    
 
 def create_connection():
-    """ create a database connection to a SQLite database """
+    """ Create a database connection to a SQLite database """
     connection = None
     try:
         connection = sqlite3.connect(':memory:')
-        print(sqlite3.version)
     except Error as e:
         print(e)
     
@@ -27,6 +25,7 @@ def create_connection():
 
 
 def create_table(connection, create_table_query):
+   """ Create a table based on the instructions given in the parameter 'create_table_query' """
 
    try:
       c = connection.cursor()
@@ -39,6 +38,7 @@ def create_table(connection, create_table_query):
 
 
 def create_loan(connection, loan):
+   """ Create a loan instance in the loans-table in the database """
 
    sql = ''' INSERT INTO loans(id,
                               user_id,
@@ -60,6 +60,7 @@ def create_loan(connection, loan):
 
 
 def create_visit(connection, visit):
+   """ Create a visit instance in the visits-table in the database """
 
    sql = ''' INSERT INTO visits(
                            visit_id,
@@ -79,6 +80,7 @@ def create_visit(connection, visit):
 
 
 def create_customer(connection, customer):
+   """ Create a customer instance in the customer-table in the database """
 
    sql = ''' INSERT INTO customers(
                            user_id,
@@ -100,30 +102,40 @@ def create_customer(connection, customer):
 
 
 def load_loan_data(connection, URL_LOANS):
-   
+   """ Read the loan-data from all loan data-files, and insert all instances 
+   into the loan-table in the database. """
 
+   # Iterate over all possible loan-files, using the years and months to format the file path
    for year in ['17', '18', '19']:
       for month in range(1, 12):
+
+         # Format URL with the current year and month
          URL = URL_LOANS.format(year, str(month))
 
+         # Try tead the data from the formatted URL if the file exists
          try:
             data = load_data(URL)
          except urllib.error.HTTPError:
             continue
          
+         # Iterate over all lines in the csv-data, format the line and insert in table in database
          first_line = True
          for line in data:
 
+            # Skip first line with column names
             if first_line:
                first_line = False
                continue
-
+            
+            # Parsing the line
             loan = line.decode("utf-8").strip().rstrip(",").lstrip(",").split(",")[1:]
 
+            # Remove excess elements in line
             if len(loan) >= 8:
                loan = loan[:8]
                loan[7] = loan[7].lstrip('"(')
 
+            # Add empty elements to compensate for missing parameter values in line
             while len(loan) < 8:
                loan.append(None)
 
@@ -131,38 +143,47 @@ def load_loan_data(connection, URL_LOANS):
 
 
 def load_visits_data(connection, URL_VISITS):
-   
+   """ Read the visit-data the given URL, and insert all instances 
+   into the visits-table in the database. """
+
    data = load_data(URL_VISITS)
    
    first_line = True
    for line in data:
 
+      # Skip first line with column names
       if first_line:
          first_line = False
          continue
-
+      
+      # Parse line and insert instance into table
       visit = line.decode("utf-8").strip().rstrip(",").lstrip(",").split(",")
       create_visit(connection, visit)
 
 
 def load_customer_data(connection, URL_CUSTOMERS):
-   
+   """ Read the customer-data the given URL, and insert all instances 
+   into the customers-table in the database. """
+
    data = load_data(URL_CUSTOMERS)
 
    first_line = True
    for line in data:
 
+      # Skip first line with column names
       if first_line:
          first_line = False
          continue
       
+      # Parse line and insert instance into table
       customer = line.decode("utf-8")
       JSON_object = json.loads(customer)
-      cust_data = list(JSON_object.values())
-      create_customer(connection, cust_data)
+      customer_data = list(JSON_object.values())
+      create_customer(connection, customer_data)
 
 
 def join_tables_and_write_to_file(connection, OUTPUT_DATA_PATH):
+   """ Join loan, visit and customer tables and write to csv-file """
 
    query = ''' SELECT loans.id,
                      loans.user_id,
@@ -203,7 +224,7 @@ if __name__ == '__main__':
    URL_VISITS = "http://rocker-data-engineering-task.storage.googleapis.com/data/visits.csv"
    URL_LOANS = "http://rocker-data-engineering-task.storage.googleapis.com/data/loan-20{}-{}.csv"
    URL_CUSTOMERS = "http://rocker-data-engineering-task.storage.googleapis.com/data/customers.json"
-   OUTPUT_DATA_PATH = "final_data.csv"
+   OUTPUT_DATA_PATH = "data/final_data.csv"
 
    sql_create_loan_table = """ CREATE TABLE IF NOT EXISTS loans (
                                         id integer PRIMARY KEY,
